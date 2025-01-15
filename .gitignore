@@ -17,7 +17,6 @@ uploads/
 .env.local
 .env.*.local
 config/*.local.php
-config.php
 
 # 🛠️ Dépendances Composer
 /vendor/
