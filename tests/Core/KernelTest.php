@@ -4,7 +4,6 @@ namespace Brikphp\Tests\Core;
 
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ServerRequestInterface;
-use Psr\Http\Message\ResponseInterface;
 use Brikphp\Core\Kernel;
 
 class KernelTest extends TestCase

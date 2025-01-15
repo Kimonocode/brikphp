@@ -1,6 +1,6 @@
 <?php
 
-namespace Test\Unit\Infra;
+namespace Brikphp\Tests\Core\Router;
 
 use Brikphp\Core\Router\Router;
 use Brikphp\Core\Router\RouterInterface;

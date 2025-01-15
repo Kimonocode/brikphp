@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\Brikphp\Http\Controller;
+namespace Brikphp\Tests\Http\Controller;
 
 use Brikphp\Http\Controller\Controller;
 use PHPUnit\Framework\TestCase;

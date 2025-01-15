@@ -1,7 +1,8 @@
 {
     "name": "kimonocode/brikphp",
-    "license": "BSD-3-Clause",
-    "minimum-stability": "dev",
+    "license": "MIT",
+    "minimum-stability": "stable",
+    "prefer-stable": true,
     "authors": [
         {
             "name": "ronald"
