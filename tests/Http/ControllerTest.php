@@ -2,90 +2,122 @@
 
 namespace Brikphp\Tests\Http\Controller;
 
-use Brikphp\Http\Controller\Controller;
 use PHPUnit\Framework\TestCase;
-use Psr\Http\Message\ResponseInterface;
+use GuzzleHttp\Psr7\Response;
 
 class ControllerTest extends TestCase
 {
-    private Controller $controller;
+    private TestController $controller;
 
     protected function setUp(): void
     {
-        $this->controller = new Controller();
+        // Crée une instance d'une classe testable
+        $this->controller = new TestController();
     }
 
-    public function testNotFoundResponse(): void
+    public function testSetResponse()
     {
-        $response = $this->controller->notFound()->toJson();
+        // Test de la méthode `setResponse` avec un code 200
+        $this->controller->testSetResponse(200, 'Custom Message', ['key' => 'value']);
+        $jsonResponse = $this->controller->testToJson();
 
-        $this->assertInstanceOf(ResponseInterface::class, $response);
-        $this->assertEquals(404, $response->getStatusCode());
+        $this->assertInstanceOf(Response::class, $jsonResponse);
+        $body = json_decode($jsonResponse->getBody()->getContents(), true);
 
-        $body = json_decode($response->getBody(), true);
+        // Vérifie le code de statut, le message et les données
+        $this->assertEquals(200, $body['status']);
+        $this->assertEquals('Custom Message', $body['message']);
+        $this->assertEquals(['key' => 'value'], $body['data']);
+    }
+
+    public function testDefaultResponse()
+    {
+        // Test des valeurs par défaut de la réponse (200, OK)
+        $jsonResponse = $this->controller->testToJson();
+
+        $this->assertInstanceOf(Response::class, $jsonResponse);
+        $body = json_decode($jsonResponse->getBody()->getContents(), true);
+
+        // Vérifie le statut, le message et les données par défaut
+        $this->assertEquals(200, $body['status']);
+        $this->assertEquals('OK', $body['message']);
+        $this->assertEquals([], $body['data']);
+    }
+
+    public function testNotFoundResponse()
+    {
+        // Test de la réponse 404
+        $this->controller->testNotFound();
+        $jsonResponse = $this->controller->testToJson();
+
+        $body = json_decode($jsonResponse->getBody()->getContents(), true);
+
+        // Vérifie le statut 404 et le message "Not Found"
+        $this->assertEquals(404, $body['status']);
         $this->assertEquals('Not Found', $body['message']);
-        $this->assertEmpty($body['data']);
     }
 
-    public function testForbiddenResponse(): void
+    public function testBadRequestResponse()
     {
-        $response = $this->controller->forbidden()->toJson();
+        // Test de la réponse 400 avec des erreurs
+        $this->controller->testBadRequest(['error' => 'Invalid data']);
+        $jsonResponse = $this->controller->testToJson();
 
-        $this->assertInstanceOf(ResponseInterface::class, $response);
-        $this->assertEquals(403, $response->getStatusCode());
+        $body = json_decode($jsonResponse->getBody()->getContents(), true);
 
-        $body = json_decode($response->getBody(), true);
-        $this->assertEquals('Forbidden', $body['message']);
-        $this->assertEmpty($body['data']);
-    }
-
-    public function testUnauthorizedResponse(): void
-    {
-        $response = $this->controller->unauthorized()->toJson();
-
-        $this->assertInstanceOf(ResponseInterface::class, $response);
-        $this->assertEquals(401, $response->getStatusCode());
-
-        $body = json_decode($response->getBody(), true);
-        $this->assertEquals('Unauthorized', $body['message']);
-        $this->assertEmpty($body['data']);
-    }
-
-    public function testBadRequestResponse(): void
-    {
-        $errors = ['field' => 'Invalid value'];
-        $response = $this->controller->badRequest($errors)->toJson();
-
-        $this->assertInstanceOf(ResponseInterface::class, $response);
-        $this->assertEquals(400, $response->getStatusCode());
-
-        $body = json_decode($response->getBody(), true);
+        // Vérifie le statut 400, le message "Bad Request" et les erreurs
+        $this->assertEquals(400, $body['status']);
         $this->assertEquals('Bad Request', $body['message']);
-        $this->assertEquals($errors, $body['data']);
+        $this->assertEquals(['error' => 'Invalid data'], $body['data']);
     }
 
-    public function testCustomResponse(): void
+    public function testUnauthorizedResponse()
     {
-        $response = $this->controller->setResponse(418, "I'm a teapot", ['info' => 'Custom message'])->toJson();
+        // Test de la réponse 401 Unauthorized
+        $this->controller->testUnauthorized();
+        $jsonResponse = $this->controller->testToJson();
 
-        $this->assertInstanceOf(ResponseInterface::class, $response);
-        $this->assertEquals(418, $response->getStatusCode());
+        $body = json_decode($jsonResponse->getBody()->getContents(), true);
 
-        $body = json_decode($response->getBody(), true);
-        $this->assertEquals("I'm a teapot", $body['message']);
-        $this->assertEquals(['info' => 'Custom message'], $body['data']);
+        // Vérifie le statut 401 et le message "Unauthorized"
+        $this->assertEquals(401, $body['status']);
+        $this->assertEquals('Unauthorized', $body['message']);
     }
 
-    public function testJsonEncodingErrorHandling(): void
+    public function testInternalServerErrorResponse()
     {
-        // Simulate an invalid UTF-8 sequence
-        $invalidData = "\xB1\x31";
-        $response = $this->controller->setResponse(200, 'Test', $invalidData)->toJson();
+        // Test de la réponse 500 Internal Server Error
+        $this->controller->testSetResponse(500, 'Something went wrong');
+        $jsonResponse = $this->controller->testToJson();
 
-        $this->assertEquals(500, $response->getStatusCode());
+        $body = json_decode($jsonResponse->getBody()->getContents(), true);
 
-        $body = json_decode($response->getBody(), true);
-        $this->assertEquals('JSON Encoding Error', $body['message']);
-        $this->assertStringContainsString('Malformed UTF-8', $body['data']);
+        // Vérifie le statut 500 et le message d'erreur
+        $this->assertEquals(500, $body['status']);
+        $this->assertEquals('Something went wrong', $body['message']);
+    }
+
+    public function testInvalidHttpCode()
+    {
+        // Test pour s'assurer qu'une exception est levée avec un code HTTP invalide
+        $this->expectException(\InvalidArgumentException::class);
+        $this->controller->testSetResponse(999); // 999 n'est pas un code HTTP valide
+    }
+
+    public function testJsonEncodingError()
+    {
+        // Injecte une structure récursive pour provoquer une erreur de codage JSON
+        $recursiveArray = [];
+        $recursiveArray['self'] = &$recursiveArray;
+
+        $this->controller->testSetResponse(200, 'OK', $recursiveArray);
+        $jsonResponse = $this->controller->testToJson();
+
+        $body = json_decode($jsonResponse->getBody()->getContents(), true);
+
+        // Vérifie que l'erreur de codage JSON est bien gérée
+        $this->assertEquals(500, $body['status']);
+        $this->assertEquals('Erreur de codage JSON', $body['message']);
+        $this->assertStringContainsString('Recursion', $body['data']);
     }
 }

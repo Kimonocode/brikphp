@@ -5,14 +5,14 @@ namespace Brikphp\Http\Controller;
 use GuzzleHttp\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
 
-class Controller
+abstract class Controller
 {
-    private int $code = 200; // Default to HTTP 200 OK
+    private int $code = 200; // HTTP 200 OK par défaut
     private string $message = 'OK';
     private array|string $data = [];
 
     /**
-     * Table des messages HTTP par défaut.
+     * Messages HTTP par défaut.
      */
     private const HTTP_MESSAGES = [
         200 => 'OK',
@@ -22,12 +22,11 @@ class Controller
         401 => 'Unauthorized',
         403 => 'Forbidden',
         404 => 'Not Found',
-        418 => 'Teapo',
         500 => 'Internal Server Error',
         502 => 'Bad Gateway',
         503 => 'Service Unavailable',
     ];
-    
+
     /**
      * Définit une réponse HTTP générique.
      *
@@ -36,28 +35,28 @@ class Controller
      * @param array|string $data
      * @return self
      */
-    public function setResponse(int $code, ?string $message = null, array|string $data = []): self
+    protected function setResponse(int $code, ?string $message = null, array|string $data = []): self
     {
-        
-        if (!array_key_exists($code, self::HTTP_MESSAGES)) {
+        if (!isset(self::HTTP_MESSAGES[$code])) {
             throw new \InvalidArgumentException("Code HTTP invalide : $code");
         }
 
         $this->code = $code;
-        $this->message = $message ?? self::HTTP_MESSAGES[$code] ?? 'Unknown Status';
+        $this->message = $message ?? self::HTTP_MESSAGES[$code];
         $this->data = $data;
 
         return $this;
     }
 
     /**
-     * Envoie des données au format json avec une réponse 200 o
+     * Prépare une réponse JSON générique avec code 200.
+     *
      * @param array $data
-     * @return Controller
+     * @return self
      */
-    public function send(array $data)
+    protected function send(array $data): self
     {
-        return $this->setResponse($this->code, $this->message, $data);
+        return $this->setResponse(200, null, $data);
     }
 
     /**
@@ -65,7 +64,7 @@ class Controller
      *
      * @return self
      */
-    public function notFound(): self
+    protected function notFound(): self
     {
         return $this->setResponse(404);
     }
@@ -75,7 +74,7 @@ class Controller
      *
      * @return self
      */
-    public function forbidden(): self
+    protected function forbidden(): self
     {
         return $this->setResponse(403);
     }
@@ -85,7 +84,7 @@ class Controller
      *
      * @return self
      */
-    public function unauthorized(): self
+    protected function unauthorized(): self
     {
         return $this->setResponse(401);
     }
@@ -96,9 +95,20 @@ class Controller
      * @param string|array $errors
      * @return self
      */
-    public function badRequest(string|array $errors): self
+    protected function badRequest(string|array $errors): self
     {
         return $this->setResponse(400, null, $errors);
+    }
+
+    /**
+     * Prépare une réponse 500 Internal Server Error.
+     *
+     * @param string|null $message
+     * @return self
+     */
+    protected function internalServerError(?string $message = null): self
+    {
+        return $this->setResponse(500, $message ?? 'Une erreur interne s’est produite.');
     }
 
     /**
@@ -106,27 +116,30 @@ class Controller
      *
      * @return ResponseInterface
      */
-    public function toJson(): ResponseInterface
+    protected function toJson(): ResponseInterface
     {
-        $json = json_encode([
+        $responseBody = [
             'status' => $this->code,
             'message' => $this->message,
             'data' => $this->data,
-        ], JSON_UNESCAPED_UNICODE);
+        ];
 
+        $json = json_encode($responseBody, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
+        // Gestion des erreurs de codage JSON
         if ($json === false) {
-            $json = json_encode([
+            $responseBody = [
                 'status' => 500,
-                'message' => 'JSON Encoding Error',
+                'message' => 'Erreur de codage JSON',
                 'data' => json_last_error_msg(),
-            ], JSON_UNESCAPED_UNICODE);
-
+            ];
+            $json = json_encode($responseBody, JSON_UNESCAPED_UNICODE);
             $this->code = 500;
         }
 
         return new Response(
             $this->code,
-            ['Content-Type' => 'application/json'],
+            ['Content-Type' => 'application/json; charset=utf-8'],
             $json
         );
     }
