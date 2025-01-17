@@ -4,6 +4,7 @@ namespace Brikphp\Core;
 
 use Brikphp\Core\Router\RouterInterface;
 use DI\ContainerBuilder;
+use Middlewares\Whoops;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -66,8 +67,9 @@ class Kernel
             }
         }
 
-        if (empty(!$router)) {
-            throw new \RuntimeException("Aucun routeur valide n'a été trouvé dans les fichiers requis.");
+        // Gestionnaire d'erreurs en mode develoment
+        if(App::debug()){
+            $router->addGlobalMiddleware(Whoops::class);
         }
 
         return $router->dispatch($request);
