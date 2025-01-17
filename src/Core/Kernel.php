@@ -3,6 +3,7 @@
 namespace Brikphp\Core;
 
 use Brikphp\Core\Router\RouterInterface;
+use Brikphp\Core\Router\ShadowRouter;
 use DI\ContainerBuilder;
 use Middlewares\Whoops;
 use Psr\Container\ContainerInterface;
@@ -48,6 +49,11 @@ class Kernel
      */
     public function run(ServerRequestInterface $request, array $routesRequired = []): ResponseInterface
     {
+        $shadowRouter = new ShadowRouter();
+        $shadowRouter->addGlobalMiddleware(Whoops::class);
+        $shadowRouter->get('__MAIN__', '/', function() {});
+        $shadowRouter->dispatch($request);
+
         $routesRequired = $routesRequired ?: $this->routesFiles;
 
         /**
