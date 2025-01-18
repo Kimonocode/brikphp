@@ -19,8 +19,8 @@ class Router implements RouterInterface
      */
     private array $routes = [
         'GET' => [],
-        'POST' => [],
         'PUT' => [],
+        'POST' => [],
         'DELETE' => []
     ];
 
@@ -97,8 +97,8 @@ class Router implements RouterInterface
         $this->failIfRouteAlreadyExistByNameAndMethod($name);
         $route = new Route(
             'GET',
-            $name,
             ($this->currentGroupPrefix ?? '') . $path,
+            $name,
             $handler
         );
 
@@ -111,29 +111,7 @@ class Router implements RouterInterface
         return $route;
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function delete(string $name, string $path, array|callable $handler): Route 
-    {
-        $this->failIfRouteAlreadyExistByNameAndMethod($name, 'DELETE');
-        $route = new Route(
-            'DELETE',
-            $name,
-            ($this->currentGroupPrefix ?? '') . $path,
-            $handler
-        );
-
-        // Ajout des middlewares du groupe
-        foreach ($this->currentGroupMiddlewares as $middleware) {
-            $route->middleware($middleware);
-        }
-
-        $this->routes['DELETE'][$route->getPath()] = $route;
-        return $route;
-    }
-    
-    /**
+        /**
      * @inheritDoc
      */
     public function post(string $name, string $path, array|callable $handler): Route 
@@ -141,8 +119,8 @@ class Router implements RouterInterface
         $this->failIfRouteAlreadyExistByNameAndMethod($name, 'POST');
         $route = new Route(
             'POST',
-            $name,
             ($this->currentGroupPrefix ?? '') . $path,
+            $name,
             $handler
         );
 
@@ -154,7 +132,7 @@ class Router implements RouterInterface
         $this->routes['POST'][$route->getPath()] = $route;
         return $route;
     }
-    
+
     /**
      * @inheritDoc
      */
@@ -163,8 +141,8 @@ class Router implements RouterInterface
         $this->failIfRouteAlreadyExistByNameAndMethod($name, 'PUT');
         $route = new Route(
             'PUT',
-            $name,
             ($this->currentGroupPrefix ?? '') . $path,
+            $name,
             $handler
         );
 
@@ -177,6 +155,28 @@ class Router implements RouterInterface
         return $route;
     }
 
+    /**
+     * @inheritDoc
+     */
+    public function delete(string $name, string $path, array|callable $handler): Route 
+    {
+        $this->failIfRouteAlreadyExistByNameAndMethod($name, 'DELETE');
+        $route = new Route(
+            'DELETE',
+            ($this->currentGroupPrefix ?? '') . $path,
+            $name,
+            $handler
+        );
+
+        // Ajout des middlewares du groupe
+        foreach ($this->currentGroupMiddlewares as $middleware) {
+            $route->middleware($middleware);
+        }
+
+        $this->routes['DELETE'][$route->getPath()] = $route;
+        return $route;
+    }
+    
     /**
      * @inheritDoc
      */
@@ -366,6 +366,14 @@ class Router implements RouterInterface
             }
 
             $instance = new $controller();
+            $reflection = new \ReflectionClass($instance);
+            foreach ($reflection->getMethods() as $method) { 
+                foreach ($method->getAttributes(Route::class) as $attribute) {
+                    $route = $attribute->newInstance();
+                    var_dump($route);
+                    die();
+                }
+            }
             $response = $this->callHandler([$instance, $method], $request);
 
             if (!$response instanceof ResponseInterface) {

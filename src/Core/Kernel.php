@@ -3,9 +3,7 @@
 namespace Brikphp\Core;
 
 use Brikphp\Core\Router\RouterInterface;
-use Brikphp\Core\Router\ShadowRouter;
 use DI\ContainerBuilder;
-use Middlewares\Whoops;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -49,36 +47,31 @@ class Kernel
      */
     public function run(ServerRequestInterface $request, array $routesRequired = []): ResponseInterface
     {
-        $shadowRouter = new ShadowRouter();
-        $shadowRouter->addGlobalMiddleware(Whoops::class);
-        $shadowRouter->get('__MAIN__', '/', function() {});
-        $shadowRouter->dispatch($request);
+        $router = Kernel::container()->get(RouterInterface::class);
 
         $routesRequired = $routesRequired ?: $this->routesFiles;
-
-        /**
-         * @var RouterInterface|null
-         */
-        $router = null;
-
+        
         foreach ($routesRequired as $file) {
             if (!file_exists($file)) {
                 throw new \RuntimeException("Le fichier de routes est manquant : $file");
             }
 
-            $result = require_once $file;
-
-            if ($result instanceof RouterInterface) {
-                $router = $result;
-            }
-        }
-
-        // Gestionnaire d'erreurs en mode develoment
-        if(App::debug()){
-            $router->addGlobalMiddleware(Whoops::class);
+            require_once $file;
         }
 
         return $router->dispatch($request);
+    }
+    
+    /**
+     * Ajoute un fichier de configuration
+     * @param string $configFile
+     * @return void
+     */
+    public function addConfigFile(string $configFile): void
+    {
+        if (!in_array($configFile, $this->configFiles)) {
+            $this->configFiles[] = $configFile;
+        }
     }
 
     /**
@@ -130,12 +123,5 @@ class Kernel
         }
 
         self::$container = $builder->build();
-    }
-
-    public function addConfigFile(string $configFile): void
-    {
-        if (!in_array($configFile, $this->configFiles)) {
-            $this->configFiles[] = $configFile;
-        }
     }
 }

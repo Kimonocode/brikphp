@@ -30,9 +30,9 @@ interface RouteInterface {
     /**
      * Renvoie la fonction à appeler 
      *
-     * @return callable|array
+     * @return callable|array|null
      */
-    public function getHandler(): callable|array;
+    public function getHandler(): callable|array|null;
 
     /**
      * Ajoute un middleware dans la liste

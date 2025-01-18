@@ -2,8 +2,10 @@
 
 namespace Brikphp\Core\Router;
 
+use Attribute;
 use Psr\Http\Server\MiddlewareInterface;
 
+#[Attribute(Attribute::TARGET_METHOD)]
 class Route implements RouteInterface {
     
     /**
@@ -30,7 +32,7 @@ class Route implements RouteInterface {
     /**
      * hanlder
      *
-     * @var callable|array
+     * @var callable|array|null
      */
     private $handler;
 
@@ -40,7 +42,13 @@ class Route implements RouteInterface {
      */
     private array $middlewares = [];
 
-    public function __construct(string $method, string $name, string $path, callable|array $handler)
+    public function __construct
+    (
+        string $method, 
+        string $path, 
+        string $name, 
+        callable|array $handler = null
+    )
     {
         $this->method = $method;
         $this->name = $name;
