@@ -18,6 +18,7 @@ uploads/
 .env.*.local
 config/*.local.php
 notes.md
+prompts
 @app
 
 # 🛠️ Dépendances Composer

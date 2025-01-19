@@ -1,62 +1,83 @@
 <?php
 
-namespace Brikphp\Tests\Core\Router;
-
-use Brikphp\Core\Router\Route;
 use PHPUnit\Framework\TestCase;
+use Brikphp\Core\Router\Route;
 use Psr\Http\Server\MiddlewareInterface;
+
+class MockMiddleware implements MiddlewareInterface
+{
+    /**
+     * @inheritDoc
+     */
+    public function process(Psr\Http\Message\ServerRequestInterface $request, Psr\Http\Server\RequestHandlerInterface $handler): Psr\Http\Message\ResponseInterface 
+    {
+        return $handler->handle($request);
+    }
+}
 
 class RouteTest extends TestCase
 {
-    public function testRouteInitialization()
+    public function testConstructorAndGetters()
     {
         $method = 'GET';
-        $name = 'home';
-        $path = '/home';
-        $handler = fn() => 'handler';
+        $path = '/test';
+        $name = 'test_route';
+        $handler = function () {
+            return 'Handler executed';
+        };
 
-        $route = new Route($method, $name, $path, $handler);
+        $route = new Route($method, $path, $name, $handler);
 
         $this->assertSame($method, $route->getMethod());
-        $this->assertSame($name, $route->getName());
         $this->assertSame($path, $route->getPath());
+        $this->assertSame($name, $route->getName());
         $this->assertSame($handler, $route->getHandler());
     }
 
-    public function testAddMiddlewareWithValidClass()
+    public function testMiddlewareAddingWithInstances()
     {
-        $middlewareMock = $this->createMock(MiddlewareInterface::class);
+        $route = new Route('GET', '/test', 'test_route');
 
-        $route = new Route('GET', 'test', '/test', fn() => 'handler');
-        $route->middleware($middlewareMock);
+        $middleware = new MockMiddleware();
+        $route->middleware($middleware);
 
         $middlewares = $route->getMiddlewares();
-
         $this->assertCount(1, $middlewares);
-        $this->assertSame($middlewareMock, $middlewares[0]);
+        $this->assertInstanceOf(MockMiddleware::class, $middlewares[0]);
     }
 
-    public function testAddMiddlewareWithInvalidClassName()
+    public function testMiddlewareAddingWithClassName()
+    {
+        $route = new Route('GET', '/test', 'test_route');
+
+        $route->middleware(MockMiddleware::class);
+
+        $middlewares = $route->getMiddlewares();
+        $this->assertCount(1, $middlewares);
+        $this->assertInstanceOf(MockMiddleware::class, $middlewares[0]);
+    }
+
+    public function testMiddlewareThrowsForInvalidClass()
     {
         $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage("La classe middleware InvalidMiddleware n'existe pas.");
 
-        $route = new Route('GET', 'test', '/test', fn() => 'handler');
-        $route->middleware('InvalidMiddleware');
+        $route = new Route('GET', '/test', 'test_route');
+        $route->middleware('InvalidClassName');
     }
 
-    public function testGetMiddlewares()
+    public function testMiddlewareThrowsForInvalidInstance()
     {
-        $middlewareMock1 = $this->createMock(MiddlewareInterface::class);
-        $middlewareMock2 = $this->createMock(MiddlewareInterface::class);
+        $this->expectException(\RuntimeException::class);
 
-        $route = new Route('POST', 'test', '/test', fn() => 'handler');
-        $route->middleware($middlewareMock1)->middleware($middlewareMock2);
+        $route = new Route('GET', '/test', 'test_route');
+        $route->middleware(\stdClass::class);
+    }
 
-        $middlewares = $route->getMiddlewares();
+    public function testMiddlewareThrowsForInvalidType()
+    {
+        $this->expectException(\InvalidArgumentException::class);
 
-        $this->assertCount(2, $middlewares);
-        $this->assertSame($middlewareMock1, $middlewares[0]);
-        $this->assertSame($middlewareMock2, $middlewares[1]);
+        $route = new Route('GET', '/test', 'test_route');
+        $route->middleware(123);
     }
 }
