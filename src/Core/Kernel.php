@@ -86,7 +86,7 @@ class Kernel
     public static function container(): ContainerInterface
     {
         if (!self::$container) {
-            throw new \RuntimeException("Le conteneur n'a pas été initialisé.");
+            throw new RuntimeException("Le conteneur n'a pas été initialisé.");
         }
         return self::$container;
     }
@@ -112,7 +112,7 @@ class Kernel
 
         foreach ($this->configFiles as $configFile) {
             if (!file_exists($configFile)) {
-                throw new \RuntimeException("Le fichier de configuration {$configFile} n'existe pas.");
+                throw new RuntimeException("Le fichier de configuration {$configFile} n'existe pas.");
             }
             $builder->addDefinitions($configFile);
         }
@@ -132,12 +132,12 @@ class Kernel
         
         foreach ($routesRequired as $file) {
             if (!file_exists($file)) {
-                throw new \RuntimeException("Le fichier de routes est manquant : $file");
+                throw new RuntimeException("Le fichier de routes est manquant : $file");
             }
 
             $result = require_once $file;
             if(!$result instanceOf RouterInterface){
-                throw new \RuntimeException("Aucun router n'a été retourné a la fin du fichiers de route");
+                throw new RuntimeException("Aucun router n'a été retourné a la fin du fichiers de route");
             }
             $router = $result;
         }
