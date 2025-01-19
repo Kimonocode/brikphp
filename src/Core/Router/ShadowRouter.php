@@ -2,7 +2,12 @@
 
 namespace Brikphp\Core\Router;
 
-class ShadowRouter extends Router {
+use Brikphp\Core\Kernel;
 
+class ShadowRouter {
 
+    public function __invoke() 
+    {
+        return Kernel::container()->get(RouterInterface::class);
+    }
 }

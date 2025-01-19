@@ -2,14 +2,17 @@
 
 namespace Brikphp\Core;
 
+use Brikphp\Core\Router\Route;
 use Brikphp\Core\Router\RouterInterface;
 use Brikphp\FileSystem\File;
 use Brikphp\FileSystem\FileSystem;
 use Brikphp\FileSystem\Json\JsonComposer;
 use DI\ContainerBuilder;
+use FilesystemIterator;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use RuntimeException;
 
 class Kernel
 {
@@ -50,25 +53,8 @@ class Kernel
      */
     public function run(ServerRequestInterface $request, array $routesRequired = []): ResponseInterface
     {
-        
-        $router = Kernel::container()->get(RouterInterface::class);
-
-        $this->loadRoutesFiles($routesRequired);
-
-        $fileSystem = new FileSystem();
-        $fileSystem->iterate(self::root() . '/src/Http/Controller', function(\RecursiveDirectoryIterator $iterator) {
-            $composer = $this->getUserComposer();
-            $userNamespace = $composer->getUserNamespace();
-            foreach ($iterator as $file) {
-                if ($file->getExtension() === 'php') {
-                    $classController = $file->getFilename();
-                    var_dump($userNamespace, $classController);
-                    die();
-                }
-            }
-        });
-
-        return $router->dispatch($request);
+        $this->loadControllersAnnotations(self::root() . '/src/Http/Controller');
+        return $this->loadRoutesFiles($routesRequired)->dispatch($request);
     }
     
     /**
@@ -138,9 +124,9 @@ class Kernel
      * Charges les différents fichiers de routes
      * @param string[] $routesRequired
      * @throws \RuntimeException
-     * @return void
+     * @return RouterInterface
      */
-    private function loadRoutesFiles(array $routesRequired): void
+    private function loadRoutesFiles(array $routesRequired): RouterInterface
     {
         $routesRequired = $routesRequired ?: $this->routesFiles;
         
@@ -149,7 +135,108 @@ class Kernel
                 throw new \RuntimeException("Le fichier de routes est manquant : $file");
             }
 
-            require_once $file;
+            $result = require_once $file;
+            if(!$result instanceOf RouterInterface){
+                throw new \RuntimeException("Aucun router n'a été retourné a la fin du fichiers de route");
+            }
+            $router = $result;
+        }
+        return $router;
+    }
+
+    /**
+     * Permet les annotations de Route sur les controller
+     * 
+     * <code>
+     * 
+     *  class UserController extends Controller {
+     *      
+     *      [Route('GET', '/user', 'user.show')]
+     *      public function index()
+     *      {
+     *          // do something    
+     *      }
+     * }
+     * </code>
+     * @param string $path
+     * @return void
+     */
+    private function loadControllersAnnotations(string $path)
+    {
+        $fileSystem = new FileSystem();
+        $fileSystem->iterate($path, function (\RecursiveDirectoryIterator $iterator) {
+
+            $composer = $this->getUserComposer();
+            $userNamespace = rtrim($composer->getUserNamespace(), '\\'); // Assurez-vous que le namespace se termine correctement
+
+            foreach ($iterator as $file) {
+                if ($file->isDir()) {
+                    // Appel récursif pour traiter les sous-dossiers
+                    $this->loadControllersAnnotations($file->getRealPath());
+                    continue;
+                }
+
+                if ($file->getExtension() === 'php') {
+                    $controller = $this->resolveClassController($file, $userNamespace);
+                    $this->resolveControllerAnnotation($controller);
+                }
+            }
+        });
+    }
+
+    /**
+     * Resoud la class à apeller pour les annotations de routes
+     * 
+     * @param \FilesystemIterator $file
+     * @param string $userNamespace
+     * @throws \RuntimeException
+     * @return object
+     */
+    private function resolveClassController(FilesystemIterator $file, string $userNamespace): object
+    {
+        $realPath = $file->getRealPath();
+
+        // Trouver la position de "src" et extraire après
+        $srcPosition = strrpos($realPath, "src");
+        if ($srcPosition === false) {
+            throw new RuntimeException("Le dossier src à la racine de l'application n'existe pas");
+        }
+        $relativePath = substr($realPath, $srcPosition + 4); // Ignore "src/"
+        $classPath = str_replace(['/', '\\'], '\\', $relativePath); // Convertir en namespace
+        $className = "{$userNamespace}\\{$classPath}";
+
+        // Supprimer l'extension .php
+        $className = substr($className, 0, -4);
+
+        // Instancier la classe dynamiquement
+        if (!class_exists($className)) {
+            throw new RuntimeException("La classe {$className} n'existe pas");
+        }
+        return new $className();
+    }
+
+    /**
+     * Appelle le Router avec le bon handler selon l'annotation de Route passé au controller
+     * @param object $controller
+     * @return void
+     */
+    private function resolveControllerAnnotation(object $controller)
+    {
+        $router = self::container()->get(RouterInterface::class);
+        $reflection = new \ReflectionClass($controller);
+        foreach ($reflection->getMethods() as $method) { 
+            foreach ($method->getAttributes(Route::class) as $attribute) {
+                $route = $attribute->newInstance();
+                $controllerMethod = $method->getName();
+                $httpMethod = strtolower($route->getMethod());
+                    
+                call_user_func(
+                    [$router, $httpMethod], 
+                    $route->getName(), 
+                    $route->getPath(), 
+                    [$controller::class, $controllerMethod]
+                );
+            }
         }
     }
 
