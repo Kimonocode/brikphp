@@ -3,6 +3,9 @@
 namespace Brikphp\Core;
 
 use Brikphp\Core\Router\RouterInterface;
+use Brikphp\FileSystem\File;
+use Brikphp\FileSystem\FileSystem;
+use Brikphp\FileSystem\Json\JsonComposer;
 use DI\ContainerBuilder;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -47,17 +50,23 @@ class Kernel
      */
     public function run(ServerRequestInterface $request, array $routesRequired = []): ResponseInterface
     {
+        
         $router = Kernel::container()->get(RouterInterface::class);
 
-        $routesRequired = $routesRequired ?: $this->routesFiles;
-        
-        foreach ($routesRequired as $file) {
-            if (!file_exists($file)) {
-                throw new \RuntimeException("Le fichier de routes est manquant : $file");
-            }
+        $this->loadRoutesFiles($routesRequired);
 
-            require_once $file;
-        }
+        $fileSystem = new FileSystem();
+        $fileSystem->iterate(self::root() . '/src/Http/Controller', function(\RecursiveDirectoryIterator $iterator) {
+            $composer = $this->getUserComposer();
+            $userNamespace = $composer->getUserNamespace();
+            foreach ($iterator as $file) {
+                if ($file->getExtension() === 'php') {
+                    $classController = $file->getFilename();
+                    var_dump($userNamespace, $classController);
+                    die();
+                }
+            }
+        });
 
         return $router->dispatch($request);
     }
@@ -123,5 +132,30 @@ class Kernel
         }
 
         self::$container = $builder->build();
+    }
+
+    /**
+     * Charges les différents fichiers de routes
+     * @param string[] $routesRequired
+     * @throws \RuntimeException
+     * @return void
+     */
+    private function loadRoutesFiles(array $routesRequired): void
+    {
+        $routesRequired = $routesRequired ?: $this->routesFiles;
+        
+        foreach ($routesRequired as $file) {
+            if (!file_exists($file)) {
+                throw new \RuntimeException("Le fichier de routes est manquant : $file");
+            }
+
+            require_once $file;
+        }
+    }
+
+    private function getUserComposer()
+    {
+        $file = new File(self::root() . '/composer.json');
+        return new JsonComposer(new FileSystem(), $file);
     }
 }

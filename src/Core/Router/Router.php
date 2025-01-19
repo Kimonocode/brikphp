@@ -94,7 +94,7 @@ class Router implements RouterInterface
      */
     public function get(string $name, string $path, callable|array $handler): Route
     {
-        $this->failIfRouteAlreadyExistByNameAndMethod($name);
+        $this->failIfRouteExist($name);
         $route = new Route(
             'GET',
             ($this->currentGroupPrefix ?? '') . $path,
@@ -116,7 +116,7 @@ class Router implements RouterInterface
      */
     public function post(string $name, string $path, array|callable $handler): Route 
     {
-        $this->failIfRouteAlreadyExistByNameAndMethod($name, 'POST');
+        $this->failIfRouteExist($name, 'POST');
         $route = new Route(
             'POST',
             ($this->currentGroupPrefix ?? '') . $path,
@@ -138,7 +138,7 @@ class Router implements RouterInterface
      */
     public function put(string $name, string $path, array|callable $handler): Route 
     {
-        $this->failIfRouteAlreadyExistByNameAndMethod($name, 'PUT');
+        $this->failIfRouteExist($name, 'PUT');
         $route = new Route(
             'PUT',
             ($this->currentGroupPrefix ?? '') . $path,
@@ -160,7 +160,7 @@ class Router implements RouterInterface
      */
     public function delete(string $name, string $path, array|callable $handler): Route 
     {
-        $this->failIfRouteAlreadyExistByNameAndMethod($name, 'DELETE');
+        $this->failIfRouteExist($name, 'DELETE');
         $route = new Route(
             'DELETE',
             ($this->currentGroupPrefix ?? '') . $path,
@@ -175,6 +175,39 @@ class Router implements RouterInterface
 
         $this->routes['DELETE'][$route->getPath()] = $route;
         return $route;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function dispatch(ServerRequestInterface $request): ResponseInterface
+    {
+        $uri = $request->getUri()->getPath();
+        $method = $request->getMethod();
+        $middlewares = $this->globalMiddlewares;
+
+        if (empty($this->getRoutes($method))) {
+            throw new InvalidArgumentException("Aucune route définie pour la méthode $method.");
+        }
+
+        foreach ($this->getRoutes($method) as $route) {
+            $this->currentRoute = $route;
+            $params = $this->matchRoute($route->getPath(), $uri);
+            if ($params !== false) {
+                // Ajout des paramètres à la requête
+                $request = $request->withAttribute('params', $params);
+
+                // Récupère les middlewares spécifiques à la route
+                $middlewares = array_merge($middlewares, $route->getMiddlewares());
+
+                // Exécute la chaîne de middlewares (globaux + spécifiques à la route)
+                // Appel le Handler Final (Controller) si aucun middleware n'est trouvé.
+                return $this->applyMiddlewares($middlewares, $request, $this->getFinalHandler());
+            }
+        }
+
+        // Si aucune route correspondante n'est trouvée, retourne une erreur 404
+        return new Response(404, ['Content-Type' => 'text/plain'], '404 Not Found');
     }
     
     /**
@@ -201,6 +234,37 @@ class Router implements RouterInterface
     }
 
     /**
+     * Compare une route dynamique avec une URI et extrait les paramètres.
+     *
+     * @param string $routePath
+     * @param string $uri
+     * @return array|false
+     */
+    private function matchRoute(string $routePath, string $uri): array|false
+    {
+        $routeParts = explode('/', trim($routePath, '/'));
+        $uriParts = explode('/', trim($uri, '/'));
+
+        if (count($routeParts) !== count($uriParts)) {
+            return false;
+        }
+
+        $params = [];
+
+        foreach ($routeParts as $index => $part) {
+            if (preg_match('/^\{(\w+)\}$/', $part, $matches)) {
+                // Paramètre dynamique détecté, on extrait la valeur
+                $params[$matches[1]] = $uriParts[$index];
+            } elseif ($part !== $uriParts[$index]) {
+                // Les segments statiques ne correspondent pas
+                return false;
+            }
+        }
+
+        return $params;
+    }
+
+    /**
      * Applique les middlewares.
      *
      * @param array $middlewares
@@ -209,7 +273,7 @@ class Router implements RouterInterface
      * @throws \RuntimeException
      * @return ResponseInterface
      */
-    public function applyMiddlewares(array $middlewares, ServerRequestInterface $request, callable $finalHandler): ResponseInterface
+    private function applyMiddlewares(array $middlewares, ServerRequestInterface $request, callable $finalHandler): ResponseInterface
     {
         if (empty($middlewares)) {
             return $this->callFinaldHandler($request, $finalHandler);
@@ -252,97 +316,6 @@ class Router implements RouterInterface
     }
 
     /**
-     * @inheritDoc
-     */
-    public function dispatch(ServerRequestInterface $request): ResponseInterface
-    {
-        $uri = $request->getUri()->getPath();
-        $method = $request->getMethod();
-
-        if (empty($this->getRoutes($method))) {
-            throw new InvalidArgumentException("Aucune route définie pour la méthode $method.");
-        }
-
-        // Ajout des middlewares globaux
-        $middlewares = $this->globalMiddlewares;
-
-        foreach ($this->getRoutes($method) as $route) {
-            $this->currentRoute = $route;
-            $params = $this->matchRoute($route->getPath(), $uri);
-            if ($params !== false) {
-                // Ajout des paramètres à la requête
-                $request = $request->withAttribute('params', $params);
-
-                // Récupère les middlewares spécifiques à la route
-                $middlewares = array_merge($middlewares, $route->getMiddlewares());
-
-                // Définition du handler final
-                $handler = function (ServerRequestInterface $req): ResponseInterface {
-                    $response = $this->getHandler($this->currentRoute, $req);
-
-                    // Validation explicite pour transformer un retour invalide
-                    if (!$response instanceof ResponseInterface) {
-                        throw new \RuntimeException("Le handler final doit retourner une instance de Psr\Http\Message\ResponseInterface.");
-                    }
-
-                    return $response;
-                };
-
-                // Exécute la chaîne de middlewares (globaux + spécifiques à la route)
-                return $this->applyMiddlewares($middlewares, $request, $handler);
-            }
-        }
-
-        // Si aucune route correspondante n'est trouvée, retourne une erreur 404
-        return new Response(404, ['Content-Type' => 'text/plain'], '404 Not Found');
-    }
-
-    /**
-     * Compare une route dynamique avec une URI et extrait les paramètres.
-     *
-     * @param string $routePath
-     * @param string $uri
-     * @return array|false
-     */
-    private function matchRoute(string $routePath, string $uri): array|false
-    {
-        $routeParts = explode('/', trim($routePath, '/'));
-        $uriParts = explode('/', trim($uri, '/'));
-
-        if (count($routeParts) !== count($uriParts)) {
-            return false;
-        }
-
-        $params = [];
-
-        foreach ($routeParts as $index => $part) {
-            if (preg_match('/^\{(\w+)\}$/', $part, $matches)) {
-                // Paramètre dynamique détecté, on extrait la valeur
-                $params[$matches[1]] = $uriParts[$index];
-            } elseif ($part !== $uriParts[$index]) {
-                // Les segments statiques ne correspondent pas
-                return false;
-            }
-        }
-
-        return $params;
-    }
-
-    /**
-     * Fail si le nom de la route exist déjà
-     * @param string $name
-     * @param string $method default GET
-     * @return void
-     */
-    private function failIfRouteAlreadyExistByNameAndMethod(string $name, string $method = 'GET')
-    {
-        $route = $this->getRouteByName($name, $method);
-        if($route){
-            throw new \RuntimeException("La route {$name} est déjà enregstrée");
-        }
-    }
-
-    /**
      * Vérifie si le handler de la route est un callable ou une classe Controller
      *
      * @param  Route $route
@@ -366,14 +339,6 @@ class Router implements RouterInterface
             }
 
             $instance = new $controller();
-            $reflection = new \ReflectionClass($instance);
-            foreach ($reflection->getMethods() as $method) { 
-                foreach ($method->getAttributes(Route::class) as $attribute) {
-                    $route = $attribute->newInstance();
-                    var_dump($route);
-                    die();
-                }
-            }
             $response = $this->callHandler([$instance, $method], $request);
 
             if (!$response instanceof ResponseInterface) {
@@ -441,6 +406,24 @@ class Router implements RouterInterface
     }
 
     /**
+     * Retour D'un hanlder (Controller) explicitement valide
+     * @return callable
+     */
+    private function getFinalHandler(): callable
+    {
+        return function (ServerRequestInterface $request): ResponseInterface {
+            $response = $this->getHandler($this->currentRoute, $request);
+
+            // Validation explicite pour transformer un retour invalide
+            if (!$response instanceof ResponseInterface) {
+                throw new \RuntimeException("Le handler final doit retourner une instance de Psr\Http\Message\ResponseInterface.");
+            }
+
+            return $response;
+        };
+    }
+
+    /**
      * Appel le gestionnaire final si aucun middleware n'est trouvé
      * 
      * @param \Psr\Http\Message\ServerRequestInterface $request
@@ -457,6 +440,20 @@ class Router implements RouterInterface
         }
         
         return $response;
+    }
+
+    /**
+     * Fail si le nom de la route existe déjà
+     * @param string $name
+     * @param string $method default GET
+     * @return void
+     */
+    private function failIfRouteExist(string $name, string $method = 'GET')
+    {
+        $route = $this->getRouteByName($name, $method);
+        if($route){
+            throw new \RuntimeException("La route {$name} est déjà enregstrée");
+        }
     }
 }
 

@@ -3,11 +3,12 @@
 namespace Brikphp\Core;
 
 use Brikphp\Core\Env\Env;
+use Brikphp\Http\Response;
 use GuzzleHttp\Psr7\ServerRequest;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Throwable;
 use function Http\Response\send;
-
 class App extends Kernel {
     
     /**
@@ -30,7 +31,7 @@ class App extends Kernel {
     }
 
     /**
-     * Return ServerRequet Poulated whit Globals
+     * Return ServerRequest Poulated whit Globals
      * @return \Psr\Http\Message\ServerRequestInterface
      */
     public function fromGlobals(): ServerRequestInterface
@@ -38,4 +39,17 @@ class App extends Kernel {
         return ServerRequest::fromGlobals();
     }
 
+    /**
+     * Catch une erreur et Emet une Response (Crash Application)
+     * @param \Throwable $e
+     * @return void
+     */
+    public function fail(Throwable $e): void
+    {
+        $this->emit(new Response(
+            500,
+            ['Content-Type' => 'text/plain'],
+            'Whoops ! Une erreur interne est survenue: ' . $e->getMessage()
+        ));
+    }
 }
